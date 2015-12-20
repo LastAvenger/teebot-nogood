@@ -89,8 +89,8 @@ def main():
     print('[teebot]', player, 'start tee!')
     gs = game_stat(server, port, player)
 
-    leave_pattern = re.compile(r"\[[0-9a-f]+\]\[client\]: disconnecting. reason='(.*)'")
-    join_pattern = re.compile(r"\[[0-9a-f]+\]\[client\]: connecting to '([0-9.]+?):([0-9]+)'")
+    leave_pattern = re.compile(r"\[[0-9a-f\-: ]+\]\[client\]: disconnecting. reason='(.*)'")
+    join_pattern = re.compile(r"\[[0-9a-f\-: ]+\]\[client\]: connecting to '([0-9.]+?):([0-9]+)'")
     with subprocess.Popen([game], stdout = subprocess.PIPE) as p:
         while True:
             line = p.stdout.readline()

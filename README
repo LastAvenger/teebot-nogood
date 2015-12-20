@@ -3,4 +3,4 @@ teebot
 a ircbot used to forward game status about teeworlds.
 
 - require python >= 3
-- support client: teeworlds, ddnet (no finish)
+- support client: teeworlds-0.6.3, ddnet-9.0.2
