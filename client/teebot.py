@@ -7,14 +7,14 @@ import socket
 import subprocess
 
 '''
-`tee_msg` uesd to transmit between teebot client and server
+this dict is uesd to transmit between teebot client and server
 
-tee_msg = {
-        'player': '',   # player's name
-        'status': '',   # player's status
-        'server': '',   # server the player in
-        'port': 0       # which port this server used
-        }
+{
+    'player': '',   # player's name
+    'status': '',   # player's status
+    'server': '',   # server the player in
+    'port': 0       # which port this server used
+}
 
 player's status:
     'START': player open teeworlds client and prepares for game
@@ -23,33 +23,45 @@ player's status:
     'LEAVE': player leave current server
 '''
 
-
-sock = None
-
-def dict2byte(d):
-    return bytes(str(json.dumps(d)), 'utf-8')
-
-
-def connect_to_srv(host, port):
-    print('[teebot]', '[net]', 'connect to', host, port)
-    sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-    sock.connect((host, port))
-    return sock
-
-
-def updata_stat(sock, msg):
-    print('[teebot]', '[net]', msg)
-    sock.send(dict2byte(msg))
-
-
-def main():
-    tee_msg = {
+class game_stat:
+    stat = {
             "player": '',
             "status": '',
             "server": '',
             "port": 0
             }
+    s = None
 
+    def dict2byte(self, d):
+        return bytes(str(json.dumps(d)), 'utf-8')
+
+
+    def __init__(self, host, port, player):
+        print('[teebot]', '[game_stat]', 'connect to', host, port)
+        self.s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        self.s.connect((host, port))
+        self.stat['player'] = player
+        self.update('START')
+
+
+    def update(self, status, server = '', port = 0):
+        if status == 'JOIN' and self.stat['status'] == 'JOIN':
+            return
+        if status == 'LEAVE' and self.stat['status'] != 'JOIN':
+            return
+
+        self.stat['status'] = status
+        self.stat['server'] = server
+        self.stat['port'] = port
+
+        print('[teebot]', '[update]', self.stat)
+        self.s.send(self.dict2byte(self.stat))
+
+        if status == 'EXIT':
+            self.s.close()
+
+
+def main():
     with open('./config.json') as f:
         conf = json.loads(f.read())
         port = conf['port']
@@ -75,38 +87,28 @@ def main():
             exit(-1)
 
     print('[teebot]', player, 'start tee!')
-    tee_msg['player'] = player
-    tee_msg['status'] = 'START'
-    s = connect_to_srv(server, port)
-    updata_stat(s, tee_msg)
+    gs = game_stat(server, port, player)
 
     leave_pattern = re.compile(r"\[[0-9a-f]+\]\[client\]: disconnecting. reason='(.*)'")
-    enter_pattern = re.compile(r"\[[0-9a-f]+\]\[client\]: connecting to '([0-9.]+?):([0-9]+)'")
+    join_pattern = re.compile(r"\[[0-9a-f]+\]\[client\]: connecting to '([0-9.]+?):([0-9]+)'")
     with subprocess.Popen([game], stdout = subprocess.PIPE) as p:
         while True:
             line = p.stdout.readline()
             if not line:    # leave game
                 break
-            sline = line.decode('utf-8')
+            line = line.decode('utf-8')
 
-            leave_info = leave_pattern.match(sline)
-            if leave_info and tee_msg['status'] == 'JOIN':
-                reason = leave_info.group(1)
-                print('[teebot]', '[status]', player, 'leave server, reason:', reason)
-                tee_msg['status']  = 'LEAVE'
-                updata_stat(s, tee_msg)
+            leave_info = leave_pattern.match(line)
+            join_info = join_pattern.match(line)
 
-            join_info = enter_pattern.match(sline)
-            if join_info and tee_msg['status'] != 'JOIN':
-                game_srv = join_info.group(1)
-                gmae_port = int(join_info.group(2))
-                print('[teebot]', '[status]', player, 'join server:', game_srv + ':', gmae_port)
-                tee_msg['status']  = 'JOIN'
-                tee_msg['server']  = game_srv
-                tee_msg['port']  = gmae_port
-                updata_stat(s, tee_msg)
+            if leave_info:
+                gs.update('LEAVE')
 
-    print('[teebot]', player, 'leave game')
+            if join_info:
+                game_srv, game_port = join_info.groups()
+                gs.update('JOIN', server= game_srv, port = int(game_port))
+
+    gs.update('EXIT')
 
 if __name__ == '__main__':
     main()

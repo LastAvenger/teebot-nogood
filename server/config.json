@@ -1,9 +1,8 @@
 {
-    "irc": {
-        "host": "irc.freenode.net",
-        "port": "6666",
-        "channel": "#lasttest",
-        "nick": "teebot"
-    },
-    "port": "30553"
+    "port": 30539,
+
+    "irc_host": "irc.freenode.net",
+    "irc_port": 6666,
+    "irc_channel": "#lasttest",
+    "irc_nick": "teebot"
 }
