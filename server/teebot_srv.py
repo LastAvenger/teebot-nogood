@@ -17,52 +17,68 @@ this dict is uesd to transmit between teebot client and server
 
 player's status:
     'START': player open teeworlds client
-    'EXIT': player close teeworlds client   <- This one doesn't appear in server's playerlist
     'JOIN': player enter a server
     'LEAVE': player leave current server
 '''
 
-class playerlist:
-    s = None
-    plist = {}
+class server:
+    sock = None
+    clients = {}
 
     def __init__(self, port):
-        print('[teebot_srv]', '[player_list]', 'listen on port:', port)
-        self.s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        print('[teebot_srv]', '[server]', 'listen on port:', port)
+        self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         host = socket.gethostname()
-        self.s.bind((host, port))
+        self.sock.bind((host, port))
+        self.sock.listen(5)
 
-    def sync(self, chan, send_msg):
-        data, addr = self.s.recvfrom(128)
-        tee_msg = json.loads(data.decode('utf-8'))
-        print('[teebot_srv]', '[player_list]', 'recv:', tee_msg)
+    def recv(self, csock, addr, chan, send_msg):
+        client_name = '[client-{0}]'.format(addr[0])
 
-        if not tee_msg['player'] in self.plist:
+        try:
+            data = csock.recv(128)
+            tee_msg = json.loads(data.decode('utf-8'))
+
             if tee_msg['status'] != 'START':
-                print('[teebot_srv]', '[player_list]', '**RECV WRONG STATUS**', tee_msg)
-                print('recv status:', tee_msg)
-                return
-            else:
-                print('[teebot_srv]', '[player_list]', tee_msg['player'], 'start tee!')
-                send_msg(chan, tee_msg['player'] + ' start tee!')
-        else:
-            if tee_msg['status'] == 'EXIT':
-                self.plist.pop(tee_msg['player'], None)
-                print('[teebot_srv]', '[player_list]', tee_msg['player'], 'exit tee')
-                send_msg(chan, tee_msg['player'] + ' exit tee')
-                return
-            elif tee_msg['status'] == 'START':
-                print('[teebot_srv]', '[player_list]', '**RECV WRONG STATUS**')
-                print('cur status:', self.plist[tee_msg['player']])
-                print('recv status:', tee_msg)
+                print('[teebot_srv]', '[server]', client_name, '**RECV WRONG STATUS**', 'connection close', tee_msg)
+                csock.close()
                 return
 
-        self.plist[tee_msg['player']] = tee_msg
+            self.clients[addr[0]] = tee_msg
+        except:
+            print('[teebot_srv]', '[server]', client_name, '**RECV WRONG DATA**')
+
+        while True:
+            try:
+                data = csock.recv(128)
+
+                if not data:
+                    print('[teebot_srv]', '[server]', client_name, 'exit')
+                    csock.close()
+                    return
+
+                tee_msg = json.loads(data.decode('utf-8'))
+                print('[teebot_srv]', '[server]', client_name, 'recv:', tee_msg)
+
+                if tee_msg['status'] != self.clients[addr[0]]:
+                    self.clients[addr[0]] = tee_msg
+                else:
+                    print('[teebot_srv]', '[server]', client_name, '**RECV WRONG STATUS**')
+            except:
+                print('[teebot_srv]', '[server]', client_name, '**RECV WRONG DATA**')
+
+
+    def start(self, chan, send_msg):
+        while True:
+            csock, addr = self.sock.accept()
+            print('[teebot_srv]', '[server]', 'accept connection from', addr)
+            t = threading.Thread(target = self.recv, args = (csock, addr, chan, send_msg))
+            t.start()
 
 
     def get_list(self):
         reply = ''
-        for _, v in self.plist.items():
+        for _, v in self.clients.items():
            if v['status'] == 'JOIN':
                reply = reply + '{0} {1}:{2}, '.format(v['player'], v['server'], v['port']) 
            elif v['status'] != 'EXIT':
@@ -85,13 +101,12 @@ def main():
     irc_bot = ircbot(irc_host, irc_port, irc_nick)
     irc_bot.join_chan(irc_chan)
 
-    player_list = playerlist(port)
+    srv = server(port)
 
-    task = threading.Thread(target = irc_bot.recv_msg, args = (player_list.get_list,))
+    task = threading.Thread(target = irc_bot.recv_msg, args = (srv.get_list,))
     task.start()
 
-    while True:
-        player_list.sync(irc_chan, irc_bot.send_msg)
+    srv.start(irc_chan, irc_bot.send_msg)
 
 if __name__ == '__main__':
     main()

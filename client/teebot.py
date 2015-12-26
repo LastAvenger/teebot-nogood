@@ -17,35 +17,39 @@ this dict is uesd to transmit between teebot client and server
 }
 
 player's status:
-    'START': player open teeworlds client and prepares for game
-    'EXIT': player close teeworlds client
+    'START': player open teeworlds client
     'JOIN': player enter a server
     'LEAVE': player leave current server
 '''
 
-class game_stat:
+class client:
+    sock = None
     stat = {
             "player": '',
             "status": '',
             "server": '',
             "port": 0
             }
-    s = None
 
     def dict2byte(self, d):
         return bytes(str(json.dumps(d)), 'utf-8')
 
 
     def __init__(self, host, port, player):
-        print('[teebot]', '[game_stat]', 'connect to', host, port)
-        self.s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        self.s.connect((host, port))
+        self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self.sock.settimeout(1)
+        print('[teebot]', '[client]', 'connect to ', (host, port))
+        self.sock.connect((host, port))
+
         self.stat['player'] = player
-        self.update('START')
+        self.send('START')
 
 
-    def update(self, status, server = '', port = 0):
-        if status == 'JOIN' and self.stat['status'] == 'JOIN':
+    def send(self, status, server = '', port = 0):
+        if status == 'EXIT':
+            self.sock.close()
+            return
+        if status == self.stat['status'] == 'JOIN':
             return
         if status == 'LEAVE' and self.stat['status'] != 'JOIN':
             return
@@ -54,11 +58,8 @@ class game_stat:
         self.stat['server'] = server
         self.stat['port'] = port
 
-        print('[teebot]', '[update]', self.stat)
-        self.s.send(self.dict2byte(self.stat))
-
-        if status == 'EXIT':
-            self.s.close()
+        print('[teebot]', '[client]', 'send:', self.stat)
+        self.sock.send(self.dict2byte(self.stat))
 
 
 def main():
@@ -74,7 +75,7 @@ def main():
     elif game == 'ddnet':
         tee_conf = tee_conf + 'settings_ddnet.cfg'
     else:
-        print('[teebot]',  'wrong *game* value')
+        print('[teebot]',  'wrong game value')
         exit(-1)
 
     with open(tee_conf) as f:
@@ -87,7 +88,7 @@ def main():
             exit(-1)
 
     print('[teebot]', player, 'start tee!')
-    gs = game_stat(server, port, player)
+    c = client(server, port, player)
 
     leave_pattern = re.compile(r"\[[0-9a-f\-: ]+\]\[client\]: disconnecting. reason='(.*)'")
     join_pattern = re.compile(r"\[[0-9a-f\-: ]+\]\[client\]: connecting to '([0-9.]+?):([0-9]+)'")
@@ -102,13 +103,14 @@ def main():
             join_info = join_pattern.match(line)
 
             if leave_info:
-                gs.update('LEAVE')
+                c.send('LEAVE')
 
             if join_info:
                 game_srv, game_port = join_info.groups()
-                gs.update('JOIN', server= game_srv, port = int(game_port))
+                c.send('JOIN', server= game_srv, port = int(game_port))
 
-    gs.update('EXIT')
+    c.send('EXIT')
+    print('[teebot]', player, 'leave tee')
 
 if __name__ == '__main__':
     main()
