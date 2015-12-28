@@ -1,6 +1,7 @@
 # -*- encoding: UTF-8 -*-
 import re
 import socket
+import threading
 
 class ircbot:
     sock = None
@@ -25,9 +26,10 @@ class ircbot:
         self.sock.send(bytes('PONG :pingis\n', 'utf-8'))
 
 
-    def send_msg(self, chan, msg):
+    def send_msg(self, msg):
         print('[teebot_srv]', '[ircbot]', 'send msg:', msg)
-        self.sock.send(bytes('PRIVMSG ' + chan + ' :' + msg + '\n','utf-8'))
+        for chan in self.chans:
+            self.sock.send(bytes('PRIVMSG ' + chan + ' :' + msg + '\n','utf-8'))
 
 
     def recv_msg(self, get_list):
@@ -45,5 +47,9 @@ class ircbot:
                 if msg.startswith('.tee'):
                     print('[teebot_srv]', '[ircbot]', 'recv command `.tee`')
                     reply = get_list()
-                    self.send_msg(chan,  man + ': ' + reply)
+                    self.send_msg(man + ': ' + reply)
 
+
+    def start(self, get_list):
+        t = threading.Thread(target = self.recv_msg, args = (get_list,))
+        t.start()

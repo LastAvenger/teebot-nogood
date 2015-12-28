@@ -30,9 +30,9 @@ class server:
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         host = socket.gethostname()
         self.sock.bind((host, port))
-        self.sock.listen(5)
+        self.sock.listen(10)
 
-    def recv(self, csock, addr, chan, send_msg):
+    def recv(self, csock, addr, send_msg):
         client_name = '[client-{0}]'.format(addr[0])
 
         try:
@@ -40,13 +40,16 @@ class server:
             tee_msg = json.loads(data.decode('utf-8'))
 
             if tee_msg['status'] != 'START':
-                print('[teebot_srv]', '[server]', client_name, '**RECV WRONG STATUS**', 'connection close', tee_msg)
+                print('[teebot_srv]', '[server]', client_name, '**RECV WRONG STATUS **', 'connection close')
                 csock.close()
                 return
-
             self.clients[addr[0]] = tee_msg
+            send_msg(tee_msg['player'] + ' start tee!')
+
         except:
-            print('[teebot_srv]', '[server]', client_name, '**RECV WRONG DATA**')
+            print('[teebot_srv]', '[server]', client_name, '**RECV WRONG DATA**', 'connection close')
+            csock.close()
+            return
 
         while True:
             try:
@@ -54,6 +57,8 @@ class server:
 
                 if not data:
                     print('[teebot_srv]', '[server]', client_name, 'exit')
+                    send_msg(self.clients[addr[0]]['player'] + ' exit tee')
+                    self.clients.pop(addr[0], None)
                     csock.close()
                     return
 
@@ -66,14 +71,19 @@ class server:
                     print('[teebot_srv]', '[server]', client_name, '**RECV WRONG STATUS**')
             except:
                 print('[teebot_srv]', '[server]', client_name, '**RECV WRONG DATA**')
+                raise
+                return
 
 
-    def start(self, chan, send_msg):
+    def start(self, send_msg):
         while True:
             csock, addr = self.sock.accept()
-            print('[teebot_srv]', '[server]', 'accept connection from', addr)
-            t = threading.Thread(target = self.recv, args = (csock, addr, chan, send_msg))
-            t.start()
+            if addr[0] in self.clients:
+                print('[teebot_srv]', '[server]', 'repeated connection', addr)
+            else:
+                print('[teebot_srv]', '[server]', 'accept connection from', addr)
+                t = threading.Thread(target = self.recv, args = (csock, addr, send_msg))
+                t.start()
 
 
     def get_list(self):
@@ -98,15 +108,13 @@ def main():
         irc_chan = conf['irc_channel']
         irc_nick = conf['irc_nick']
 
-    irc_bot = ircbot(irc_host, irc_port, irc_nick)
-    irc_bot.join_chan(irc_chan)
-
+    bot = ircbot(irc_host, irc_port, irc_nick)
     srv = server(port)
 
-    task = threading.Thread(target = irc_bot.recv_msg, args = (srv.get_list,))
-    task.start()
+    bot.join_chan(irc_chan)
 
-    srv.start(irc_chan, irc_bot.send_msg)
+    bot.start(srv.get_list)
+    srv.start(bot.send_msg)
 
 if __name__ == '__main__':
     main()
