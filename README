@@ -1,5 +1,9 @@
-teebot
+teebot-ng
 ------
+**THIS REPO IS DEAD**
+this is a useless project and has stopped development
+for a available teebot, see <https://github.com/LastAvenger/teebot>
+
 a ircbot used to forward game status about teeworlds.
 
 - require python >= 3
